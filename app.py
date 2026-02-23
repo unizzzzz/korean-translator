@@ -4,33 +4,35 @@ from deep_translator import GoogleTranslator
 from gtts import gTTS
 import os
 import re
+import io  # 【修復1】新增虛擬記憶體套件，專治 iOS 語音報錯
 from streamlit_mic_recorder import speech_to_text
 
 st.set_page_config(page_title="雙向翻譯神器", page_icon="🇰🇷", layout="wide")
 
-# === 【重要】程式會自動去 Streamlit 後台的 Secrets 保險箱拿金鑰 ===
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
-# 判斷是否包含韓文的輔助函數
 def is_korean(text):
     if re.search(r'[\uac00-\ud7a3]', text):
         return True
     return False
 
-# 初始化記憶體
 if "history" not in st.session_state:
     st.session_state.history = []
 if "current_view" not in st.session_state:
     st.session_state.current_view = None
 if "text_input_area" not in st.session_state:
     st.session_state.text_input_area = ""
-# 【修復新增】一個用來控制「下次重新整理時是否要清空輸入框」的開關
 if "clear_next_time" not in st.session_state:
     st.session_state.clear_next_time = False
 
 with st.sidebar:
     st.header("⚙️ 引擎設定")
-    engine_choice = st.radio("選擇翻譯引擎：", ["高級翻譯 (AI)", "一般 GOOGLE 翻譯"])
+    # 【修復2】加入三種引擎選項，給你「快又準」的選擇
+    engine_choice = st.radio("選擇翻譯引擎：", [
+        "✨ 高級 AI (最準、較慢)", 
+        "⚡ 極速 AI (又快又準)", 
+        "🤖 一般 GOOGLE (瞬間、較不準)"
+    ])
     
     st.divider()
     st.header("🕒 歷史紀錄")
@@ -56,14 +58,15 @@ with st.sidebar:
                     st.session_state.current_view = None
                 st.rerun()
 
-def translate_with_ai(text, api_key):
+# 根據選擇的模型名稱進行翻譯
+def translate_with_ai(text, api_key, model_name):
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-2.5-flash')
+    model = genai.GenerativeModel(model_name)
     
     prompt = f"""你是一個精通中韓雙語的專業翻譯人員。
     請自動判斷以下文字的語言：
     1. 如果是「韓文」，請翻譯成流暢自然的「台灣繁體中文」。
-    2. 如果是「中文」，請翻譯成自然道地、有禮貌的「韓文敬語」（適合對粉絲見面會的偶像說）。
+    2. 如果是「中文」，請翻譯成自然道地、有禮貌的「韓文敬語」。
     【嚴格指令】只輸出翻譯結果，絕對不要加上任何解釋、羅馬拼音或多餘文字。
     需要翻譯的文字：\n{text}"""
         
@@ -93,13 +96,11 @@ with col_mic2:
         key="stt_ko"
     )
 
-# 如果任一個麥克風有收到文字，就存進文字框記憶體裡
 if spoken_zh:
     st.session_state.text_input_area = spoken_zh
 elif spoken_ko:
     st.session_state.text_input_area = spoken_ko
 
-# 【修復核心】在「畫出輸入框之前」，檢查開關是否亮著。如果亮著，就清空它並關閉開關！
 if st.session_state.clear_next_time:
     st.session_state.text_input_area = ""
     st.session_state.clear_next_time = False
@@ -114,10 +115,16 @@ if st.button("🚀 開始翻譯", type="primary"):
             tgt_lang = 'zh-TW' if is_ko else 'ko'
             direction_label = "韓文 ➡️ 中文" if is_ko else "中文 ➡️ 韓文"
 
-            if engine_choice == "高級翻譯 (AI)":
-                with st.spinner('AI 正在思考最道地的語氣...'):
-                    translated = translate_with_ai(text_to_translate, GEMINI_API_KEY)
-                engine_used = "Gemini AI"
+            # 根據引擎選擇不同的處理方式
+            if engine_choice == "✨ 高級 AI (最準、較慢)":
+                with st.spinner('AI 正在深度思考最道地的語氣...'):
+                    translated = translate_with_ai(text_to_translate, GEMINI_API_KEY, 'gemini-2.5-flash')
+                engine_used = "高級 AI"
+            elif engine_choice == "⚡ 極速 AI (又快又準)":
+                with st.spinner('AI 極速翻譯中...'):
+                    # 呼叫 8b 輕量級模型，速度極快
+                    translated = translate_with_ai(text_to_translate, GEMINI_API_KEY, 'gemini-1.5-flash-8b')
+                engine_used = "極速 AI"
             else:
                 with st.spinner('使用一般 Google 翻譯...'):
                     translator = GoogleTranslator(source=src_lang, target=tgt_lang)
@@ -135,8 +142,6 @@ if st.button("🚀 開始翻譯", type="primary"):
             
             st.session_state.history.append(new_record)
             st.session_state.current_view = new_record
-            
-            # 【修復核心】翻譯成功後，打開清空開關，然後重新整理網頁
             st.session_state.clear_next_time = True
             st.rerun()
             
@@ -158,9 +163,12 @@ if st.session_state.current_view:
         st.markdown("**原文**")
         st.write(view['source_text'])
         if st.button("🔊 發音", key="btn_src"):
+            # 【修復1】將音檔寫入虛擬記憶體，不再存成實體檔案
             tts_src = gTTS(text=view['source_text'], lang=view['source_lang'])
-            tts_src.save("src.mp3")
-            st.audio("src.mp3", format='audio/mp3')
+            fp_src = io.BytesIO()
+            tts_src.write_to_fp(fp_src)
+            fp_src.seek(0) # 將讀取點移回開頭
+            st.audio(fp_src, format='audio/mp3')
 
     with col2:
         st.markdown("**翻譯結果**")
@@ -171,6 +179,9 @@ if st.session_state.current_view:
         """, unsafe_allow_html=True)
         
         if st.button("🔊 發音", key="btn_tgt"):
+            # 【修復1】將音檔寫入虛擬記憶體
             tts_tgt = gTTS(text=view['translated_text'], lang=view['target_lang'])
-            tts_tgt.save("tgt.mp3")
-            st.audio("tgt.mp3", format='audio/mp3')
+            fp_tgt = io.BytesIO()
+            tts_tgt.write_to_fp(fp_tgt)
+            fp_tgt.seek(0)
+            st.audio(fp_tgt, format='audio/mp3')
