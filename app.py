@@ -118,12 +118,13 @@ if st.button("🚀 開始翻譯", type="primary"):
             # 根據引擎選擇不同的處理方式
             if engine_choice == "✨ 高級 AI (最準、較慢)":
                 with st.spinner('AI 正在深度思考最道地的語氣...'):
-                    translated = translate_with_ai(text_to_translate, GEMINI_API_KEY, 'gemini-2.5-flash')
+                    # 呼叫 Pro 模型，最聰明但稍微等一下
+                    translated = translate_with_ai(text_to_translate, GEMINI_API_KEY, 'gemini-2.5-pro')
                 engine_used = "高級 AI"
             elif engine_choice == "⚡ 極速 AI (又快又準)":
                 with st.spinner('AI 極速翻譯中...'):
-                    # 呼叫 8b 輕量級模型，速度極快
-                    translated = translate_with_ai(text_to_translate, GEMINI_API_KEY, 'gemini-1.5-flash-8b')
+                    # 呼叫剛剛測試成功的 Flash 模型，速度極快
+                    translated = translate_with_ai(text_to_translate, GEMINI_API_KEY, 'gemini-2.5-flash')
                 engine_used = "極速 AI"
             else:
                 with st.spinner('使用一般 Google 翻譯...'):
@@ -185,3 +186,4 @@ if st.session_state.current_view:
             tts_tgt.write_to_fp(fp_tgt)
             fp_tgt.seek(0)
             st.audio(fp_tgt, format='audio/mp3')
+
