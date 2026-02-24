@@ -27,12 +27,12 @@ if "clear_next_time" not in st.session_state:
 
 with st.sidebar:
     st.header("⚙️ 引擎設定")
-    # 【修復2】加入三種引擎選項，給你「快又準」的選擇
+# 【修復2】加入三種引擎選項，給你「快又準」的選擇
     engine_choice = st.radio("選擇翻譯引擎：", [
         "✨ 高級 AI (最準、較慢)", 
         "⚡ 極速 AI (又快又準)", 
         "🤖 一般 GOOGLE (瞬間、較不準)"
-    ])
+    ], index=1)  # 👈 加上這個參數，預設就會選到極速 AI
     
     st.divider()
     st.header("🕒 歷史紀錄")
@@ -158,32 +158,35 @@ if st.session_state.current_view:
     
     st.caption(f"模式：{view['direction']} | 引擎：{view['engine']}")
     
-    col1, col2 = st.columns(2)
+    # === 區塊 1：翻譯結果 (置於上方) ===
+    st.markdown("**翻譯結果**")
+    st.markdown(f"""
+        <div style='font-size: 26px; font-weight: bold; color: #1E90FF; line-height: 1.4; padding: 10px; border-left: 5px solid #1E90FF; background-color: #f0f8ff;'>
+            {view['translated_text']}
+        </div>
+    """, unsafe_allow_html=True)
     
-    with col1:
-        st.markdown("**原文**")
-        st.write(view['source_text'])
-        if st.button("🔊 發音", key="btn_src"):
-            # 【修復1】將音檔寫入虛擬記憶體，不再存成實體檔案
-            tts_src = gTTS(text=view['source_text'], lang=view['source_lang'])
-            fp_src = io.BytesIO()
-            tts_src.write_to_fp(fp_src)
-            fp_src.seek(0) # 將讀取點移回開頭
-            st.audio(fp_src, format='audio/mp3')
+    # 為了避免按鍵名稱重複造成 Streamlit 報錯，稍微修改一下 key
+    if st.button("🔊 發音 (翻譯)", key="btn_tgt_top"):
+        # 【修復1】將音檔寫入虛擬記憶體
+        tts_tgt = gTTS(text=view['translated_text'], lang=view['target_lang'])
+        fp_tgt = io.BytesIO()
+        tts_tgt.write_to_fp(fp_tgt)
+        fp_tgt.seek(0)
+        st.audio(fp_tgt, format='audio/mp3')
 
-    with col2:
-        st.markdown("**翻譯結果**")
-        st.markdown(f"""
-            <div style='font-size: 26px; font-weight: bold; color: #1E90FF; line-height: 1.4; padding: 10px; border-left: 5px solid #1E90FF; background-color: #f0f8ff;'>
-                {view['translated_text']}
-            </div>
-        """, unsafe_allow_html=True)
-        
-        if st.button("🔊 發音", key="btn_tgt"):
-            # 【修復1】將音檔寫入虛擬記憶體
-            tts_tgt = gTTS(text=view['translated_text'], lang=view['target_lang'])
-            fp_tgt = io.BytesIO()
-            tts_tgt.write_to_fp(fp_tgt)
-            fp_tgt.seek(0)
-            st.audio(fp_tgt, format='audio/mp3')
+    st.write("---") # 加一條低調的分隔線
+
+    # === 區塊 2：原文 (置於下方) ===
+    st.markdown("**原文**")
+    st.write(view['source_text'])
+    
+    if st.button("🔊 發音 (原文)", key="btn_src_bottom"):
+        # 【修復1】將音檔寫入虛擬記憶體，不再存成實體檔案
+        tts_src = gTTS(text=view['source_text'], lang=view['source_lang'])
+        fp_src = io.BytesIO()
+        tts_src.write_to_fp(fp_src)
+        fp_src.seek(0) # 將讀取點移回開頭
+        st.audio(fp_src, format='audio/mp3')
+
 
